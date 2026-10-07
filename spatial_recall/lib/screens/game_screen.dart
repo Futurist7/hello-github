@@ -167,7 +167,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       stay: 'CONTINUE PLAYING',
       leave: 'QUIT',
     );
-    if (quit && mounted) Navigator.of(context).pop();
+    if (!quit || !mounted) return;
+    // Release now rather than when the route finishes animating away.
+    _setWakeLock(false);
+    Navigator.of(context).pop();
   }
 
   Future<void> _confirmRestart() async {

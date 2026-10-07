@@ -32,6 +32,14 @@ Future<void> waitFor(WidgetTester tester, Finder f, {Duration timeout = const Du
   throw TestFailure('Timed out waiting for $f');
 }
 
+Future<void> expectWakelock(WidgetTester tester, bool on) async {
+  final end = DateTime.now().add(const Duration(seconds: 5));
+  while (await WakelockPlus.enabled != on && DateTime.now().isBefore(end)) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  expect(await WakelockPlus.enabled, on);
+}
+
 Future<void> tapTile(WidgetTester tester, TilePosition t) async {
   await tester.tap(find.bySemanticsLabel('Row ${t.row + 1}, Column ${t.column + 1}'));
   await tester.pump(const Duration(milliseconds: 80));
@@ -123,7 +131,7 @@ void main() {
     await waitFor(tester, find.text('QUIT'));
     await tester.tap(find.text('QUIT'));
     await waitFor(tester, find.text('SPATIAL\nRECALL'));
-    expect(await WakelockPlus.enabled, isFalse);
+    await expectWakelock(tester, false);
 
     // Level 10 (6×6, 11 tiles) and level 20 (8×8, 17 tiles).
     await playPerfectLevel(tester, 10, 6);
