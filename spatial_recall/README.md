@@ -62,6 +62,9 @@ levels 1, 2, 10 and 20 plus the back button and app restart:
 
 ```bash
 flutter test integration_test -d <device-id>
+# On slow/software emulators use a compiled build (debug JIT can trigger ANRs):
+flutter drive --driver=test_driver/integration_test.dart \
+  --target=integration_test/app_test.dart --profile -d <device-id>
 ```
 
 `test/screenshots_test.dart` renders every screen on a phone, a small phone
