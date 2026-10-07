@@ -57,6 +57,13 @@ flutter test                      # 50 tests, including full gameplay flows
 flutter run                       # on an emulator or device
 ```
 
+On-device test (real Android plugins: storage, haptics, wake lock), playing
+levels 1, 2, 10 and 20 plus the back button and app restart:
+
+```bash
+flutter test integration_test -d <device-id>
+```
+
 `test/screenshots_test.dart` renders every screen on a phone, a small phone
 and a tablet into `build/screenshots/`.
 
