@@ -12,10 +12,13 @@ import '../game/widgets/score_display.dart';
 import '../game/widgets/spatial_board.dart';
 import '../services/audio_service.dart';
 import '../state/app_state.dart';
+import '../ui/components.dart';
 
+/// Summary of a whole session: score, accuracy, promotion and a review of
+/// every round.
 class ResultsScreen extends StatefulWidget {
   const ResultsScreen({super.key, required this.outcome});
-  final RoundOutcome outcome;
+  final SessionOutcome outcome;
 
   @override
   State<ResultsScreen> createState() => _ResultsScreenState();
@@ -24,13 +27,15 @@ class ResultsScreen extends StatefulWidget {
 class _ResultsScreenState extends State<ResultsScreen> {
   Timer? _xpTimer;
 
-  RoundOutcome get o => widget.outcome;
+  SessionOutcome get o => widget.outcome;
+  bool get isDaily => o.spec.mode == RoundMode.daily;
+  bool get isLastLevel => o.spec.config.level >= LevelManager.levelCount;
 
   @override
   void initState() {
     super.initState();
     final app = AppScope.read(context);
-    if (o.passed && o.spec.mode == RoundMode.level) {
+    if (o.promoted) {
       app.haptics.levelComplete();
       app.audio.play(SoundEffect.levelComplete);
     }
@@ -44,70 +49,73 @@ class _ResultsScreenState extends State<ResultsScreen> {
   }
 
   String get _headline {
-    final acc = o.evaluation.accuracy;
-    if (acc >= 100) return 'PERFECT RECALL!';
-    if (acc >= 80) return 'GREAT RECALL!';
-    if (o.passed) return 'NICE WORK!';
-    return 'KEEP GOING';
+    final acc = o.accuracy;
+    if (acc >= 100) return 'Flawless!';
+    if (o.promoted && acc >= 90) return 'Brilliant recall!';
+    if (o.promoted) return 'Level cleared!';
+    if (acc >= 60) return 'So close!';
+    return 'Keep training';
   }
 
-  String get _speedLabel => switch (o.score.speed) {
-    SpeedRating.fast => 'FAST',
-    SpeedRating.steady => 'STEADY',
-    SpeedRating.relaxed => 'RELAXED',
-  };
-
-  List<String> get _messages {
-    final e = o.evaluation;
-    final missed = e.targetCount - e.correctCount;
-    return [
-      if (missed > 0) 'You missed $missed position${missed == 1 ? '' : 's'}.',
-      if (o.spec.mode == RoundMode.level && !o.passed)
-        'Get ${LevelManager.tilesToPass(o.spec.config)} of ${e.targetCount} to pass. You\'ve got this.',
-      if (o.unlockedLevel != null) 'Level ${o.unlockedLevel} unlocked!',
-      if (o.newBest) 'New best score!',
-      if (o.leveledUp) 'You reached player level ${o.playerLevelAfter}!',
-      if (o.spec.mode == RoundMode.daily)
-        o.officialDailyRecorded
-            ? 'Official daily score recorded.'
-            : 'Practice round — your official daily score is unchanged.',
-    ];
+  String get _verdict {
+    final need = o.spec.config.passPercentage;
+    if (isDaily) {
+      return o.officialDailyRecorded
+          ? 'Official daily score recorded.'
+          : 'Practice round. Your official daily score is unchanged.';
+    }
+    if (o.promoted) {
+      if (o.unlockedLevel != null) return 'Promoted to Level ${o.unlockedLevel}!';
+      return isLastLevel ? 'You have cleared every level!' : 'Level cleared again. Nice consistency.';
+    }
+    return 'Reach $need% accuracy to move up. You got ${o.accuracy.round()}%.';
   }
 
   void _continue() {
-    final nav = Navigator.of(context);
-    if (o.spec.mode == RoundMode.level && o.passed && o.spec.config.level < LevelManager.levelCount) {
+    if (!isDaily && o.promoted && !isLastLevel) {
       Nav.levelIntro(context, o.spec.config.level + 1, replace: true);
     } else {
-      nav.pop();
+      Navigator.of(context).pop();
     }
   }
 
-  void _tryAgain() => Nav.play(context, Rounds.again(_retrySpec()), replace: true);
-
-  /// Retrying a daily is always practice.
-  RoundSpec _retrySpec() => o.spec.mode == RoundMode.daily
-      ? RoundSpec(mode: RoundMode.daily, config: o.spec.config, pattern: o.spec.pattern, dailyDate: o.spec.dailyDate)
-      : o.spec;
+  void _again() => Nav.play(context, Sessions.again(o.spec), replace: true);
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final reduced = reduceMotionOf(context, app.settings.reducedMotion);
-    final e = o.evaluation;
-    final text = Theme.of(context).textTheme;
-    final positive = o.passed;
-    final isDaily = o.spec.mode == RoundMode.daily;
+    final positive = o.promoted || (isDaily && o.accuracy >= 80);
+    final accent = positive ? AppColors.mint : AppColors.coral;
 
-    final primary = positive || isDaily
-        ? FilledButton(onPressed: _continue, child: Text(isDaily ? 'DONE' : 'CONTINUE'))
-        : FilledButton(onPressed: _tryAgain, child: const Text('TRY AGAIN'));
-    final secondary = positive || isDaily
-        ? OutlinedButton(onPressed: _tryAgain, child: Text(isDaily ? 'PRACTICE AGAIN' : 'PLAY AGAIN'))
-        : OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: const Text('CONTINUE'));
+    final primaryLabel = isDaily
+        ? 'Done'
+        : o.promoted && !isLastLevel
+        ? 'Next level'
+        : o.promoted
+        ? 'Done'
+        : 'Try again';
+    final primary = PrimaryButton(
+      label: primaryLabel,
+      icon: primaryLabel == 'Next level' ? Icons.arrow_forward_rounded : null,
+      gradient: positive ? AppGradients.brand : AppGradients.sunrise,
+      onPressed: o.promoted || isDaily ? _continue : _again,
+    );
+    final secondary = SecondaryButton(
+      label: isDaily ? 'Practice again' : (o.promoted ? 'Play again' : 'Back to home'),
+      onPressed: o.promoted || isDaily ? _again : () => Navigator.of(context).pop(),
+    );
+
+    var i = 0;
+    Widget enter(Widget child) => Entrance(
+      delay: Duration(milliseconds: 80 * i++),
+      enabled: !reduced,
+      child: child,
+    );
 
     return Scaffold(
       body: GameBackground(
+        tint: accent,
         child: Stack(
           children: [
             SafeArea(
@@ -115,84 +123,107 @@ class _ResultsScreenState extends State<ResultsScreen> {
                 children: [
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            _headline,
-                            textAlign: TextAlign.center,
-                            style: text.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
-                              color: positive ? AppColors.correct : AppColors.selected,
+                          enter(
+                            Text(
+                              o.spec.mode == RoundMode.level ? 'LEVEL ${o.spec.config.level}' : 'DAILY CHALLENGE',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.6,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Center(
-                            child: CountUpText(
-                              value: o.score.total,
-                              animate: !reduced,
-                              style: const TextStyle(fontSize: 64, fontWeight: FontWeight.w900, height: 1.1),
+                          enter(
+                            Text(
+                              _headline,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.8),
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Center(child: StarRow(stars: o.stars, size: 34)),
-                          const SizedBox(height: 10),
-                          Text(
-                            '${e.correctCount} / ${e.targetCount} CORRECT',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5),
-                          ),
+                          const SizedBox(height: 18),
+                          enter(_AccuracyHero(outcome: o, animate: !reduced, accent: accent)),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _Metric(label: 'Accuracy', value: '${e.accuracy.round()}%'),
+                          enter(
+                            Text(
+                              _verdict,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: positive ? AppColors.mint : AppColors.coral,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _Metric(label: 'Speed', value: _speedLabel),
-                              ),
-                            ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          enter(
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _Stat(
+                                    label: 'Perfect rounds',
+                                    value: '${o.perfectRounds}/${o.rounds.length}',
+                                    icon: Icons.verified_rounded,
+                                    color: AppColors.mint,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: _Stat(
+                                    label: 'Tiles found',
+                                    value: '${o.correct}/${o.target}',
+                                    icon: Icons.grid_view_rounded,
+                                    color: AppColors.violet,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 12),
-                          _XpPanel(outcome: o, animate: !reduced),
-                          for (final m in _messages)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 10),
-                              child: Text(
-                                m,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textSecondary,
-                                ),
+                          enter(_XpPanel(outcome: o, animate: !reduced)),
+                          if (o.newBest || o.leveledUp) ...[
+                            const SizedBox(height: 12),
+                            enter(
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  if (o.newBest)
+                                    const Pill(
+                                      label: 'New best score',
+                                      icon: Icons.emoji_events_rounded,
+                                      color: AppColors.amber,
+                                    ),
+                                  if (o.leveledUp)
+                                    Pill(
+                                      label: 'Player level ${o.playerLevelAfter}',
+                                      icon: Icons.trending_up_rounded,
+                                      color: AppColors.violet,
+                                    ),
+                                ],
                               ),
                             ),
-                          const SizedBox(height: 20),
-                          _Comparison(outcome: o, reducedMotion: reduced),
-                          const SizedBox(height: 16),
-                          _Breakdown(score: o.score),
+                          ],
+                          const SizedBox(height: 22),
+                          enter(_RoundReview(outcome: o, reducedMotion: reduced)),
                         ],
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-                    child: Column(
-                      children: [
-                        SizedBox(width: double.infinity, child: primary),
-                        const SizedBox(height: 10),
-                        SizedBox(width: double.infinity, child: secondary),
-                      ],
-                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                    child: Column(children: [primary, const SizedBox(height: 10), secondary]),
                   ),
                 ],
               ),
             ),
-            if (positive && !reduced) Positioned.fill(child: CelebrationOverlay(intensity: e.accuracy / 100)),
+            if (o.promoted && !reduced) Positioned.fill(child: CelebrationOverlay(intensity: o.accuracy / 100)),
           ],
         ),
       ),
@@ -200,78 +231,115 @@ class _ResultsScreenState extends State<ResultsScreen> {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
-  final String label, value;
-
-  @override
-  Widget build(BuildContext context) => GameCard(
-    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-    child: Column(
-      children: [
-        Caption(label),
-        const SizedBox(height: 4),
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-      ],
-    ),
-  );
-}
-
-class _Breakdown extends StatelessWidget {
-  const _Breakdown({required this.score});
-  final ScoreBreakdown score;
+/// Big ring showing session accuracy against the promotion mark, with the
+/// score and stars.
+class _AccuracyHero extends StatelessWidget {
+  const _AccuracyHero({required this.outcome, required this.animate, required this.accent});
+  final SessionOutcome outcome;
+  final bool animate;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
-    Widget row(String label, int value, {bool total = false}) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: total ? FontWeight.w900 : FontWeight.w600,
-              color: total ? AppColors.textPrimary : AppColors.textSecondary,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            total ? formatNumber(value) : '+${formatNumber(value)}',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: total ? 18 : 15),
-          ),
-        ],
-      ),
-    );
+    final o = outcome;
     return GameCard(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 20),
       child: Column(
         children: [
-          row('Base score', score.base),
-          if (score.speedBonus > 0) row('Speed bonus', score.speedBonus),
-          if (score.perfectBonus > 0) row('Perfect bonus', score.perfectBonus),
-          if (score.streakBonus > 0) row('Streak bonus', score.streakBonus),
-          const Divider(color: AppColors.outline),
-          row('Total', score.total, total: true),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: o.accuracy / 100),
+            duration: animate ? const Duration(milliseconds: 1200) : Duration.zero,
+            curve: Curves.easeOutCubic,
+            builder: (context, v, _) => Ring(
+              progress: v,
+              size: 168,
+              stroke: 14,
+              gradient: o.promoted ? AppGradients.mint : AppGradients.sunrise,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(v * 100).round()}%',
+                    style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1.1),
+                  ),
+                  const Text(
+                    'accuracy',
+                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          StarRow(stars: o.stars, size: 30),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                'Score  ',
+                style: TextStyle(fontSize: 15, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              ),
+              CountUpText(
+                value: o.score.total,
+                animate: animate,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.violet),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value, required this.icon, required this.color});
+  final String label, value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => GameCard(
+    padding: const EdgeInsets.all(16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
+      ],
+    ),
+  );
+}
+
 /// XP bar animating from the old to the new value, with a floating "+XP".
 class _XpPanel extends StatelessWidget {
   const _XpPanel({required this.outcome, required this.animate});
-  final RoundOutcome outcome;
+  final SessionOutcome outcome;
   final bool animate;
 
   @override
   Widget build(BuildContext context) {
     final o = outcome;
     return GameCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       child: TweenAnimationBuilder<double>(
         tween: Tween(begin: o.xpBefore.toDouble(), end: o.xpAfter.toDouble()),
-        duration: animate ? const Duration(milliseconds: 1100) : Duration.zero,
+        duration: animate ? const Duration(milliseconds: 1300) : Duration.zero,
         curve: Curves.easeOutCubic,
         builder: (context, xp, _) {
           final (into, needed) = XpLevels.progress(xp.round());
@@ -281,7 +349,7 @@ class _XpPanel extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Text('LEVEL $level', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                  Text('Player level $level', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   const Spacer(),
                   _FloatingXp(amount: o.xpGained, animate: animate),
                 ],
@@ -291,7 +359,7 @@ class _XpPanel extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 '${formatNumber(into)} / ${formatNumber(needed)} XP',
-                style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500, fontSize: 13),
               ),
             ],
           );
@@ -308,10 +376,7 @@ class _FloatingXp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = Text(
-      '+$amount XP',
-      style: const TextStyle(color: AppColors.active, fontWeight: FontWeight.w900, fontSize: 18),
-    );
+    final label = Pill(label: '+$amount XP', icon: Icons.bolt_rounded, color: AppColors.violet, filled: true);
     if (!animate) return label;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
@@ -319,57 +384,82 @@ class _FloatingXp extends StatelessWidget {
       curve: Curves.easeOutBack,
       builder: (context, t, child) => Opacity(
         opacity: t.clamp(0, 1),
-        child: Transform.translate(offset: Offset(0, 14 * (1 - t)), child: child),
+        child: Transform.translate(offset: Offset(0, 12 * (1 - t)), child: child),
       ),
       child: label,
     );
   }
 }
 
-class _Comparison extends StatelessWidget {
-  const _Comparison({required this.outcome, required this.reducedMotion});
-  final RoundOutcome outcome;
+/// Horizontal strip of every round's marked board.
+class _RoundReview extends StatelessWidget {
+  const _RoundReview({required this.outcome, required this.reducedMotion});
+  final SessionOutcome outcome;
   final bool reducedMotion;
 
   @override
   Widget build(BuildContext context) {
-    final grid = outcome.spec.pattern.gridSize;
-    Widget board(String title, BoardView view) => Expanded(
-      child: Column(
-        children: [
-          Caption(title, align: TextAlign.center),
-          const SizedBox(height: 8),
-          AspectRatio(
-            aspectRatio: 1,
-            child: SpatialBoard.review(
-              gridSize: grid,
-              evaluation: outcome.evaluation,
-              view: view,
-              reducedMotion: reducedMotion,
-            ),
-          ),
-        ],
-      ),
-    );
+    final o = outcome;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            board('Your answer', BoardView.yourAnswer),
-            const SizedBox(width: 12),
-            board('Correct pattern', BoardView.solution),
-          ],
+        const Padding(padding: EdgeInsets.only(left: 4, bottom: 10), child: Caption('Round review')),
+        SizedBox(
+          height: 150,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            clipBehavior: Clip.none,
+            itemCount: o.rounds.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, i) {
+              final r = o.rounds[i];
+              return SizedBox(
+                width: 116,
+                child: Column(
+                  children: [
+                    SizedBox.square(
+                      dimension: 116,
+                      child: SpatialBoard.review(
+                        gridSize: o.spec.config.gridSize,
+                        evaluation: r,
+                        view: BoardView.yourAnswer,
+                        reducedMotion: true,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(color: RoundProgress.colorFor(r.accuracy), shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'R${i + 1} · ${r.correctCount}/${r.targetCount}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         const Wrap(
           spacing: 16,
           runSpacing: 6,
-          alignment: WrapAlignment.center,
           children: [
-            _Legend(color: AppColors.correct, label: 'Correct'),
-            _Legend(color: AppColors.wrong, label: 'Wrong'),
-            _Legend(color: AppColors.active, label: 'Missed', outlined: true),
+            _Legend(color: AppColors.mint, label: 'Correct'),
+            _Legend(color: AppColors.rose, label: 'Wrong'),
+            _Legend(color: AppColors.violet, label: 'Missed', outlined: true),
           ],
         ),
       ],
@@ -399,7 +489,7 @@ class _Legend extends StatelessWidget {
       const SizedBox(width: 6),
       Text(
         label,
-        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+        style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500, fontSize: 13),
       ),
     ],
   );

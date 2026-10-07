@@ -18,8 +18,9 @@ class CountUpText extends StatelessWidget {
     super.key,
     required this.value,
     required this.style,
-    this.duration = const Duration(milliseconds: 900),
+    this.duration = const Duration(milliseconds: 1100),
     this.prefix = '',
+    this.suffix = '',
     this.animate = true,
   });
 
@@ -27,16 +28,17 @@ class CountUpText extends StatelessWidget {
   final TextStyle style;
   final Duration duration;
   final String prefix;
+  final String suffix;
   final bool animate;
 
   @override
   Widget build(BuildContext context) {
-    if (!animate) return Text('$prefix${formatNumber(value)}', style: style);
+    if (!animate) return Text('$prefix${formatNumber(value)}$suffix', style: style);
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: value.toDouble()),
       duration: duration,
       curve: Curves.easeOutCubic,
-      builder: (context, v, _) => Text('$prefix${formatNumber(v.round())}', style: style),
+      builder: (context, v, _) => Text('$prefix${formatNumber(v.round())}$suffix', style: style),
     );
   }
 }
@@ -56,22 +58,19 @@ class StarRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           for (var i = 0; i < max; i++)
-            Icon(
-              i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
-              size: size,
-              color: i < stars ? AppColors.star : AppColors.textMuted.withValues(alpha: 0.6),
-            ),
+            Icon(Icons.star_rounded, size: size, color: i < stars ? AppColors.star : AppColors.outline),
         ],
       ),
     ),
   );
 }
 
-/// Rounded XP progress bar.
+/// Rounded gradient progress bar that animates to new values.
 class XpBar extends StatelessWidget {
-  const XpBar({super.key, required this.fraction, this.height = 12});
+  const XpBar({super.key, required this.fraction, this.height = 10, this.gradient = AppGradients.brand});
   final double fraction;
   final double height;
+  final Gradient gradient;
 
   @override
   Widget build(BuildContext context) => ClipRRect(
@@ -81,12 +80,17 @@ class XpBar extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const ColoredBox(color: AppColors.surfaceHigh),
-          FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: fraction.clamp(0.0, 1.0),
-            child: const DecoratedBox(
-              decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.activeDeep, AppColors.active])),
+          const ColoredBox(color: AppColors.surfaceSoft),
+          TweenAnimationBuilder<double>(
+            tween: Tween(end: fraction.clamp(0.0, 1.0)),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeOutCubic,
+            builder: (context, f, _) => FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: f,
+              child: DecoratedBox(
+                decoration: BoxDecoration(gradient: gradient, borderRadius: BorderRadius.circular(height)),
+              ),
             ),
           ),
         ],
@@ -105,9 +109,9 @@ class StreakBadge extends StatelessWidget {
     label: '$streak day streak',
     child: ExcludeSemantics(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: AppColors.streak.withValues(alpha: 0.14),
+          color: streak > 0 ? AppColors.streak.withValues(alpha: 0.12) : AppColors.surfaceSoft,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -115,15 +119,15 @@ class StreakBadge extends StatelessWidget {
           children: [
             Icon(
               Icons.local_fire_department_rounded,
-              size: 20,
+              size: 19,
               color: streak > 0 ? AppColors.streak : AppColors.textMuted,
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 3),
             Text(
               '$streak',
               style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
                 color: streak > 0 ? AppColors.streak : AppColors.textMuted,
               ),
             ),
@@ -134,13 +138,16 @@ class StreakBadge extends StatelessWidget {
   );
 }
 
-/// The game's mark: a 4×4 grid with two lit tiles. Used on home and splash.
+/// The game's mark: a 4×4 grid with lit tiles. Used on splash and home.
 class LogoMark extends StatelessWidget {
-  const LogoMark({super.key, this.size = 72, this.lit = const {1, 10}});
+  const LogoMark({super.key, this.size = 72, this.lit = const {1, 10}, this.onDark = false});
   final double size;
 
   /// Indexes (row * 4 + column) of highlighted tiles.
   final Set<int> lit;
+
+  /// White tiles for use on a coloured background.
+  final bool onDark;
 
   @override
   Widget build(BuildContext context) {
@@ -158,15 +165,21 @@ class LogoMark extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.all(cell * 0.1),
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
+                  duration: const Duration(milliseconds: 380),
+                  curve: Curves.easeOutCubic,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(cell * 0.25),
-                    gradient: lit.contains(i)
-                        ? const LinearGradient(colors: [AppColors.active, AppColors.activeDeep])
-                        : null,
-                    color: lit.contains(i) ? null : AppColors.tileEmpty,
+                    borderRadius: BorderRadius.circular(cell * 0.28),
+                    gradient: lit.contains(i) && !onDark ? AppGradients.brand : null,
+                    color: lit.contains(i)
+                        ? (onDark ? Colors.white : null)
+                        : (onDark ? Colors.white.withValues(alpha: 0.22) : AppColors.tileEmpty),
                     boxShadow: lit.contains(i)
-                        ? [BoxShadow(color: AppColors.active.withValues(alpha: 0.5), blurRadius: cell * 0.5)]
+                        ? [
+                            BoxShadow(
+                              color: (onDark ? Colors.white : AppColors.violet).withValues(alpha: 0.4),
+                              blurRadius: cell * 0.5,
+                            ),
+                          ]
                         : null,
                   ),
                 ),

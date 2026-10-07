@@ -1,6 +1,7 @@
 // On-device test: runs the real app with real Android plugins
 // (SharedPreferences, haptics, system sounds, wake lock).
 //   flutter test integration_test -d <device>
+// On slow/software emulators use profile mode (see README).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -9,6 +10,7 @@ import 'package:spatial_recall/app/app.dart';
 import 'package:spatial_recall/app/routes.dart';
 import 'package:spatial_recall/game/models/tile_position.dart';
 import 'package:spatial_recall/screens/game_screen.dart';
+import 'package:spatial_recall/screens/results_screen.dart';
 import 'package:spatial_recall/services/audio_service.dart';
 import 'package:spatial_recall/services/haptic_service.dart';
 import 'package:spatial_recall/services/storage_service.dart';
@@ -19,8 +21,8 @@ Future<void> launch(WidgetTester tester) async {
   final storage = await StorageService.open();
   final state = AppState(storage: storage, audio: AudioService(), haptics: HapticService());
   await tester.pumpWidget(SpatialRecallApp(key: UniqueKey(), state: state));
-  await tester.pump(const Duration(seconds: 2));
-  await tester.pumpAndSettle();
+  await waitFor(tester, find.byType(Scaffold));
+  await tester.pump(const Duration(seconds: 3));
 }
 
 Future<void> waitFor(WidgetTester tester, Finder f, {Duration timeout = const Duration(seconds: 40)}) async {
@@ -45,99 +47,86 @@ Future<void> tapTile(WidgetTester tester, TilePosition t) async {
   await tester.pump(const Duration(milliseconds: 80));
 }
 
-/// Opens [level] from the intro screen and plays a perfect round.
-Future<void> playPerfectLevel(WidgetTester tester, int level, int grid) async {
-  Nav.levelIntro(tester.element(find.byType(Scaffold).first), level);
-  await waitFor(tester, find.text('START'));
-  await tester.pump(const Duration(milliseconds: 500));
-  expect(find.text('LEVEL $level'), findsOneWidget);
-  await tester.tap(find.text('START'));
-  await waitFor(tester, find.text('REMEMBER'));
-  final spec = tester.widget<GameScreen>(find.byType(GameScreen)).spec;
-  expect(spec.pattern.gridSize, grid);
-  // Every tile is big enough to tap on this phone.
-  final cell = tester.getRect(find.bySemanticsLabel(RegExp(r'^Row 1, Column 1')));
-  expect(cell.width, greaterThanOrEqualTo(40));
-  await waitFor(tester, find.text('RECREATE'), timeout: const Duration(seconds: 30));
-  for (final t in spec.pattern.positions) {
+GameScreen game(WidgetTester tester) => tester.widget<GameScreen>(find.byType(GameScreen));
+
+/// Plays round [i] perfectly.
+Future<void> playRound(WidgetTester tester, int i) async {
+  final spec = game(tester).spec;
+  await waitFor(tester, find.text('Round ${i + 1} of ${spec.rounds}'));
+  await waitFor(tester, find.text('Recreate'));
+  await tester.pump(const Duration(milliseconds: 600));
+  for (final t in spec.patterns[i].positions) {
     await tapTile(tester, t);
   }
-  await tester.tap(find.text('CHECK ANSWER'));
-  await waitFor(tester, find.text('PERFECT RECALL!'));
-  expect(find.text('${spec.pattern.tileCount} / ${spec.pattern.tileCount} CORRECT'), findsOneWidget);
-  await tester.tap(find.text('PLAY AGAIN'));
-  await waitFor(tester, find.text('REMEMBER'));
+  await tester.tap(find.text('Check'));
+  await waitFor(tester, find.text('Perfect!'));
+}
+
+Future<void> quitToHome(WidgetTester tester) async {
   await tester.binding.handlePopRoute();
-  await waitFor(tester, find.text('QUIT'));
-  await tester.tap(find.text('QUIT'));
-  await waitFor(tester, find.text('SPATIAL\nRECALL'));
+  await waitFor(tester, find.text('Quit game?'));
+  await tester.tap(find.text('Quit'));
+  await waitFor(tester, find.text('Spatial Recall'));
 }
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
 
-  testWidgets('real device: tutorial, level 1, persistence, back button, wake lock', (tester) async {
+  testWidgets('real device: tutorial, full level session, persistence, back button, 8×8, wake lock', (tester) async {
     (await SharedPreferences.getInstance()).clear();
     await launch(tester);
 
-    expect(find.text('HOW TO PLAY'), findsOneWidget);
-    await tester.ensureVisible(find.text('GOT IT'));
-    await tester.tap(find.text('GOT IT'));
-    // Wait for the game screen itself: on slow devices the 0.9s "GET READY"
-    // label can come and go between two polls.
+    expect(find.text('How to play'), findsOneWidget);
+    await tester.ensureVisible(find.text('Got it'));
+    await tester.tap(find.text('Got it'));
     await waitFor(tester, find.byType(GameScreen));
     expect(find.text('LEVEL 1'), findsOneWidget);
+    await waitFor(tester, find.text('Remember'));
+    await expectWakelock(tester, true);
 
-    await waitFor(tester, find.text('REMEMBER'));
-    expect(await WakelockPlus.enabled, isTrue, reason: 'screen kept awake during play');
-
-    final spec = tester.widget<GameScreen>(find.byType(GameScreen)).spec;
-    await waitFor(tester, find.text('RECREATE'), timeout: const Duration(seconds: 30));
-    for (final t in spec.pattern.positions) {
-      await tapTile(tester, t);
+    // A full 10-round session, all perfect.
+    for (var i = 0; i < 10; i++) {
+      await playRound(tester, i);
     }
-    await tester.tap(find.text('CHECK ANSWER'));
-    await waitFor(tester, find.text('PERFECT RECALL!'));
-    expect(await WakelockPlus.enabled, isFalse, reason: 'wake lock released after the round');
-    expect(find.text('Level 2 unlocked!'), findsOneWidget);
+    await waitFor(tester, find.byType(ResultsScreen));
+    await waitFor(tester, find.text('Promoted to Level 2!'));
+    await expectWakelock(tester, false);
 
-    // Data is on disk: a fresh storage instance (as after an app restart) sees it.
+    // Data is on disk: a fresh storage instance (as after a restart) sees it.
     final reloaded = StorageService(await SharedPreferences.getInstance()).loadProgress();
+    expect(reloaded.levels[0].completed, isTrue);
     expect(reloaded.levels[1].unlocked, isTrue);
     expect(reloaded.player.gamesPlayed, 1);
 
     // Restart the app UI from storage: no tutorial, progress kept.
     await launch(tester);
-    expect(find.text('CONTINUE'), findsOneWidget);
-    await tester.tap(find.text('Stats'));
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('1 / 30'), findsOneWidget);
-    await tester.tap(find.text('Home'));
-    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Continue'), findsOneWidget);
+    expect(find.text('Level 2'), findsOneWidget);
 
     // Level 2: Android back during play asks before quitting.
-    await tester.tap(find.text('CONTINUE'));
-    await waitFor(tester, find.text('START'));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text('START'));
-    await waitFor(tester, find.text('REMEMBER'));
+    await tester.tap(find.text('Continue'));
+    await waitFor(tester, find.text('Start'));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.text('Start'));
+    await waitFor(tester, find.text('Remember'));
     await tester.binding.handlePopRoute();
-    await waitFor(tester, find.text('QUIT GAME?'));
-    await tester.tap(find.text('CONTINUE PLAYING'));
-    await tester.pump(const Duration(milliseconds: 500));
+    await waitFor(tester, find.text('Quit game?'));
+    await tester.tap(find.text('Continue playing'));
+    await tester.pump(const Duration(milliseconds: 600));
     expect(find.byType(GameScreen), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await waitFor(tester, find.text('QUIT'));
-    await tester.tap(find.text('QUIT'));
-    await waitFor(tester, find.text('SPATIAL\nRECALL'));
+    await quitToHome(tester);
     await expectWakelock(tester, false);
 
-    // Level 10 (6×6, 11 tiles) and level 20 (8×8, 17 tiles).
-    await playPerfectLevel(tester, 10, 6);
-    await playPerfectLevel(tester, 20, 8);
-    final saved = StorageService(await SharedPreferences.getInstance()).loadProgress();
-    expect(saved.levels[9].completed, isTrue);
-    expect(saved.levels[19].completed, isTrue);
+    // Level 20: an 8×8 board with comfortable tiles on this phone.
+    Nav.play(tester.element(find.byType(Scaffold).first), Sessions.level(20));
+    await waitFor(tester, find.byType(GameScreen));
+    expect(game(tester).spec.patterns[0].gridSize, 8);
+    expect(game(tester).spec.config.memoryMs, lessThanOrEqualTo(5000));
+    await playRound(tester, 0);
+    final cell = tester.getRect(find.bySemanticsLabel(RegExp(r'^Row 1, Column 1')).first);
+    expect(cell.width, greaterThanOrEqualTo(40));
+    await waitFor(tester, find.text('Round 2 of 10'));
+    await quitToHome(tester);
   });
 }

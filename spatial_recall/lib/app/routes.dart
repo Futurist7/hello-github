@@ -22,27 +22,32 @@ Route<T> gameRoute<T>(BuildContext context, WidgetBuilder builder) {
   );
 }
 
-/// Builds round specs. Each call makes a new pattern (or the fixed daily one).
-abstract final class Rounds {
-  static RoundSpec level(int level) {
+/// Builds session specs. Each call makes fresh patterns (or the fixed daily ones).
+abstract final class Sessions {
+  static SessionSpec level(int level) {
     final config = LevelManager.config(level);
-    return RoundSpec(
+    return SessionSpec(
       mode: RoundMode.level,
       config: config,
-      pattern: generatePattern(gridSize: config.gridSize, tileCount: config.tileCount),
+      patterns: [
+        for (var i = 0; i < config.rounds; i++) generatePattern(gridSize: config.gridSize, tileCount: config.tileCount),
+      ],
     );
   }
 
-  static RoundSpec daily(DailyChallenge challenge, {required bool official}) => RoundSpec(
+  static SessionSpec daily(DailyChallenge challenge, {required bool official}) => SessionSpec(
     mode: RoundMode.daily,
     config: challenge.config,
-    pattern: challenge.pattern,
+    patterns: challenge.patterns,
     dailyDate: challenge.key,
     officialDaily: official,
   );
 
-  /// Same round settings with a fresh pattern for levels; daily stays fixed.
-  static RoundSpec again(RoundSpec spec) => spec.mode == RoundMode.level ? level(spec.config.level) : spec;
+  /// Play the same thing again: fresh patterns for levels; the daily keeps
+  /// its patterns but a replay is always practice.
+  static SessionSpec again(SessionSpec spec) => spec.mode == RoundMode.level
+      ? level(spec.config.level)
+      : SessionSpec(mode: RoundMode.daily, config: spec.config, patterns: spec.patterns, dailyDate: spec.dailyDate);
 }
 
 abstract final class Nav {
@@ -51,7 +56,7 @@ abstract final class Nav {
     return replace ? Navigator.of(context).pushReplacement(route) : Navigator.of(context).push(route);
   }
 
-  static Future<void> play(BuildContext context, RoundSpec spec, {bool replace = false}) {
+  static Future<void> play(BuildContext context, SessionSpec spec, {bool replace = false}) {
     final route = gameRoute<void>(context, (_) => GameScreen(spec: spec));
     return replace ? Navigator.of(context).pushReplacement(route) : Navigator.of(context).push(route);
   }
@@ -61,6 +66,6 @@ abstract final class Nav {
     final state = AppScope.read(context);
     final challenge = state.todaysChallenge;
     final official = state.dailyRecordFor(challenge.key) == null;
-    return play(context, Rounds.daily(challenge, official: official));
+    return play(context, Sessions.daily(challenge, official: official));
   }
 }

@@ -53,9 +53,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Applies a finished round and persists immediately.
-  Future<RoundOutcome> recordRound(RoundSpec spec, RoundEvaluation evaluation) async {
-    final outcome = ProgressionEngine.apply(_progress, evaluation, spec, now);
+  /// Applies a finished session and persists immediately.
+  Future<SessionOutcome> recordSession(SessionSpec spec, List<RoundEvaluation> rounds) async {
+    final outcome = ProgressionEngine.apply(_progress, spec, rounds, now);
     notifyListeners();
     await storage.saveProgress(_progress);
     return outcome;

@@ -44,23 +44,14 @@ class _LevelsScreenState extends State<LevelsScreen> {
     final reduced = reduceMotionOf(context, state.settings.reducedMotion);
     return Column(
       children: [
-        const TabHeader(title: 'YOUR JOURNEY'),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Row(
-            children: [
-              Text(
-                '${state.progress.levelsCompleted} / ${LevelManager.levelCount} levels completed',
-                style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+        TabHeader(
+          title: 'Your journey',
+          subtitle: '${state.progress.levelsCompleted} of ${LevelManager.levelCount} levels cleared',
         ),
-        const SizedBox(height: 8),
         Expanded(
           child: ListView.builder(
             controller: _scroll,
-            padding: const EdgeInsets.only(bottom: 32, top: 8),
+            padding: EdgeInsets.only(bottom: navBarClearance(context), top: 8),
             itemCount: LevelManager.levelCount,
             itemExtent: _rowHeight,
             itemBuilder: (context, i) => _LevelNode(
@@ -103,7 +94,7 @@ class _LevelNode extends StatelessWidget {
       if (locked) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text('Complete level ${level - 1} to unlock level $level.')));
+          ..showSnackBar(SnackBar(content: Text('Clear level ${level - 1} to unlock level $level.')));
       } else {
         Nav.levelIntro(context, level);
       }
@@ -112,7 +103,7 @@ class _LevelNode extends StatelessWidget {
     final status = locked
         ? 'locked'
         : progress.completed
-        ? 'completed, ${progress.stars} stars, best score ${progress.bestScore}'
+        ? 'cleared, ${progress.stars} stars, best score ${progress.bestScore}'
         : current
         ? 'current level'
         : 'unlocked';
@@ -122,7 +113,8 @@ class _LevelNode extends StatelessWidget {
       label: 'Level $level, $status',
       onTap: open,
       child: ExcludeSemantics(
-        child: InkWell(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: open,
           child: LayoutBuilder(
             builder: (context, box) {
@@ -140,7 +132,7 @@ class _LevelNode extends StatelessWidget {
                     Positioned.fill(
                       child: CustomPaint(
                         painter: _PathPainter(
-                          from: Offset(cx, cy),
+                          from: const Offset(0, cy).translate(cx, 0),
                           to: Offset(nextCx, cy + box.maxHeight),
                           done: progress.completed,
                         ),
@@ -158,31 +150,31 @@ class _LevelNode extends StatelessWidget {
                     ),
                   ),
                   Positioned(
-                    left: cx + 32 + 12,
-                    top: cy - 26,
-                    width: 120,
+                    left: cx + 32 + 14,
+                    top: cy - 24,
+                    width: 124,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${config.gridSize}×${config.gridSize} · ${config.tileCount} tiles',
+                          '${config.gridSize}×${config.gridSize} · ${config.memoryLabel}',
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: locked ? AppColors.textMuted : AppColors.textSecondary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: locked ? AppColors.textMuted : AppColors.textPrimary,
                           ),
                         ),
                         if (progress.unlocked) ...[
                           const SizedBox(height: 2),
-                          StarRow(stars: progress.stars, size: 14),
+                          StarRow(stars: progress.stars, size: 15),
                           if (progress.bestScore > 0)
                             Text(
                               'Best ${formatNumber(progress.bestScore)}',
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: AppColors.textMuted,
-                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                         ],
@@ -247,11 +239,11 @@ class _BubbleState extends State<_Bubble> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final w = widget;
-    final Color fill = w.locked
-        ? AppColors.surface
+    final gradient = w.locked
+        ? null
         : w.completed
-        ? AppColors.correctDeep
-        : AppColors.activeDeep;
+        ? AppGradients.mint
+        : AppGradients.brand;
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) => Container(
@@ -262,11 +254,13 @@ class _BubbleState extends State<_Bubble> with SingleTickerProviderStateMixin {
           boxShadow: w.current
               ? [
                   BoxShadow(
-                    color: AppColors.active.withValues(alpha: 0.25 + 0.35 * _c.value),
-                    blurRadius: 12 + 14 * _c.value,
-                    spreadRadius: 1 + 3 * _c.value,
+                    color: AppColors.violet.withValues(alpha: 0.25 + 0.25 * _c.value),
+                    blurRadius: 14 + 14 * _c.value,
+                    spreadRadius: 2 + 5 * _c.value,
                   ),
                 ]
+              : w.locked
+              ? AppShadows.soft
               : null,
         ),
         child: child,
@@ -274,24 +268,16 @@ class _BubbleState extends State<_Bubble> with SingleTickerProviderStateMixin {
       child: Container(
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: w.locked
-              ? null
-              : LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: w.completed
-                      ? [AppColors.correct, AppColors.correctDeep]
-                      : [AppColors.active, AppColors.activeDeep],
-                ),
-          color: w.locked ? fill : null,
-          border: Border.all(color: w.locked ? AppColors.outline : Colors.white.withValues(alpha: 0.35), width: 2),
+          gradient: gradient,
+          color: w.locked ? AppColors.surface : null,
+          border: Border.all(color: w.locked ? AppColors.outline : Colors.white, width: 3),
         ),
         alignment: Alignment.center,
         child: w.locked
-            ? const Icon(Icons.lock_rounded, color: AppColors.textMuted)
+            ? const Icon(Icons.lock_rounded, color: AppColors.textMuted, size: 22)
             : Text(
                 '${w.level}',
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF071226)),
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white),
               ),
       ),
     );
@@ -306,8 +292,8 @@ class _PathPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = done ? AppColors.correct.withValues(alpha: 0.5) : AppColors.outline
-      ..strokeWidth = 4
+      ..color = done ? AppColors.mint.withValues(alpha: 0.45) : AppColors.outline
+      ..strokeWidth = 5
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
     final dy = (to.dy - from.dy) / 2;

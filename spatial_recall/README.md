@@ -16,9 +16,11 @@ and the release manifest doesn't request the `INTERNET` permission.
 
 ## Features
 
-- 30 data-driven levels (`lib/game/logic/level_manager.dart`), from 5×5 with 3 tiles up to 8×8 with 24.
-- **Daily Challenge** seeded by the date, so everyone gets the same board each day. Your first attempt is the official score; replays are practice.
-- Scoring: +100 per tile, plus speed, perfect and streak bonuses (the streak multiplier is capped at ×1.5). Stars, XP and player levels on top.
+- 30 data-driven levels (`lib/game/logic/level_manager.dart`), from 5×5 with 3 tiles up to 8×8 with 18.
+- Every level is a **session of 10 quick rounds**. You're promoted to the next level when your accuracy across the session reaches 80%.
+- Memory time is **5 seconds or less** (5s at level 1, down to 2.5s at the top).
+- **Daily Challenge**: 5 rounds seeded by the date, so everyone gets the same boards each day. Your first attempt is the official score; replays are practice.
+- Scoring: +100 per tile, plus speed and perfect-round bonuses, and a streak bonus for consecutive perfect rounds (capped at ×1.5). Stars, XP and player levels on top.
 - Daily play streak based on calendar dates, so DST changes and clock changes are handled.
 - Results show "Your answer" next to "Correct pattern" (correct, wrong and missed tiles are marked with both colour and shape).
 - Haptics and sound, each with an on/off switch. Reduced motion follows the in-app setting or the OS setting.
@@ -41,10 +43,11 @@ lib/
   screens/                  splash, tutorial, home shell + tabs, intro, game, results, settings
   services/                 storage (SharedPreferences), audio, haptics
   state/app_state.dart      app-wide state + persistence
+  ui/components.dart        buttons, cards, rings, entrance animations
 test/                       unit, widget (full flows) and screenshot tests
 ```
 
-The board is plain Flutter widgets so it gets screen-reader semantics
+The UI uses a light theme with the bundled Poppins font (`assets/fonts`, SIL Open Font License) and shared components in `lib/ui/components.dart`. The board is plain Flutter widgets so it gets screen-reader semantics
 ("Row 3, Column 4, Selected") and reliable touch targets. Flame is used only for
 the results celebration.
 
@@ -53,12 +56,12 @@ the results celebration.
 ```bash
 flutter pub get
 flutter analyze
-flutter test                      # 50 tests, including full gameplay flows
+flutter test                      # 51 tests, including full gameplay flows
 flutter run                       # on an emulator or device
 ```
 
 On-device test (real Android plugins: storage, haptics, wake lock), playing
-levels 1, 2, 10 and 20 plus the back button and app restart:
+a full 10-round level 1 session, level 20 (8×8), the back button and an app restart:
 
 ```bash
 flutter test integration_test -d <device-id>

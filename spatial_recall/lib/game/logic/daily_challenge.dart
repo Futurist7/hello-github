@@ -4,13 +4,17 @@ import '../models/player_data.dart';
 import 'pattern_generator.dart';
 
 /// Deterministic daily challenge: the date is the seed, so every player gets
-/// the same board on the same day.
+/// the same boards on the same day.
 class DailyChallenge {
-  DailyChallenge._(this.date, this.config, this.pattern);
+  DailyChallenge._(this.date, this.config, this.patterns);
+
+  static const rounds = 5;
 
   final DateTime date;
   final LevelConfig config;
-  final Pattern pattern;
+
+  /// One pattern per round, fixed for the day.
+  final List<Pattern> patterns;
 
   String get key => dateKey(date);
 
@@ -22,16 +26,19 @@ class DailyChallenge {
     // Derive the shape from a hash of the seed so it varies day to day.
     final h = _mix(seed);
     final gridSize = 6 + h % 2; // 6×6 or 7×7
-    final tiles = gridSize == 6 ? 9 + (h >> 3) % 3 : 10 + (h >> 3) % 3;
-    final seconds = 8 + (h >> 7) % 3;
+    final tiles = gridSize == 6 ? 6 + (h >> 3) % 3 : 7 + (h >> 3) % 3;
+    final memoryMs = 3500 + ((h >> 7) % 3) * 500; // 3.5–4.5s
     final config = LevelConfig(
       level: 0,
       gridSize: gridSize,
       tileCount: tiles,
-      memorySeconds: seconds,
-      passPercentage: 70,
+      memoryMs: memoryMs,
+      rounds: rounds,
+      passPercentage: 80,
     );
-    return DailyChallenge._(day, config, generatePattern(gridSize: gridSize, tileCount: tiles, seed: seed));
+    return DailyChallenge._(day, config, [
+      for (var r = 0; r < rounds; r++) generatePattern(gridSize: gridSize, tileCount: tiles, seed: seed * 10 + r),
+    ]);
   }
 
   static int _mix(int x) {

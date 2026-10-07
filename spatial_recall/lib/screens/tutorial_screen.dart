@@ -5,14 +5,15 @@ import '../app/theme.dart';
 import '../game/models/tile_position.dart';
 import '../game/widgets/spatial_board.dart';
 import '../state/app_state.dart';
+import '../ui/components.dart';
 import 'game_screen.dart';
 import 'home_shell.dart';
 
-/// First-launch "how to play". GOT IT goes straight into level 1.
+/// First-launch "how to play". The button goes straight into level 1.
 class TutorialScreen extends StatelessWidget {
   const TutorialScreen({super.key});
 
-  static final _pattern = {TilePosition(0, 1), TilePosition(1, 3), TilePosition(3, 0)};
+  static final _pattern = {const TilePosition(0, 1), const TilePosition(1, 3), const TilePosition(3, 0)};
 
   Future<void> _done(BuildContext context, {required bool play}) async {
     final state = AppScope.read(context);
@@ -20,59 +21,93 @@ class TutorialScreen extends StatelessWidget {
     if (!context.mounted) return;
     final nav = Navigator.of(context);
     final home = gameRoute<void>(context, (_) => const HomeShell());
-    // Created once so the pattern is fixed for the round.
-    final spec = Rounds.level(1);
-    final firstRound = play ? gameRoute<void>(context, (_) => GameScreen(spec: spec)) : null;
+    // Created once so the patterns are fixed for the session.
+    final spec = Sessions.level(1);
+    final firstSession = play ? gameRoute<void>(context, (_) => GameScreen(spec: spec)) : null;
     nav.pushReplacement(home);
-    // Home stays underneath so finishing the round lands there.
-    if (firstRound != null) nav.push(firstRound);
+    // Home stays underneath so finishing the session lands there.
+    if (firstSession != null) nav.push(firstSession);
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+    final reduced = reduceMotionOf(context, AppScope.of(context).settings.reducedMotion);
+    var i = 0;
+    Widget enter(Widget child) => Entrance(
+      delay: Duration(milliseconds: 90 * i++),
+      enabled: !reduced,
+      child: child,
+    );
     return Scaffold(
       body: GameBackground(
         child: SafeArea(
           child: LayoutBuilder(
             builder: (context, box) {
               return SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
                 child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: box.maxHeight - 32),
+                  constraints: BoxConstraints(minHeight: box.maxHeight - 24),
                   child: Column(
                     children: [
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => _done(context, play: false),
-                          child: const Text('Skip Tutorial'),
+                          child: const Text('Skip Tutorial', style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text('HOW TO PLAY', style: text.headlineMedium),
-                      const SizedBox(height: 28),
-                      _Step(
-                        number: 1,
-                        text: 'Remember the highlighted tiles.',
-                        board: SpatialBoard(gridSize: 4, activeTiles: _pattern, compact: true),
+                      const SizedBox(height: 4),
+                      enter(
+                        const Text(
+                          'How to play',
+                          style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.8),
+                        ),
                       ),
-                      _Step(
-                        number: 2,
-                        text: 'The board will disappear.',
-                        board: const SpatialBoard(gridSize: 4, compact: true),
+                      const SizedBox(height: 4),
+                      enter(
+                        const Text(
+                          'Each level is 10 quick rounds.',
+                          style: TextStyle(fontSize: 15, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                        ),
                       ),
-                      _Step(
-                        number: 3,
-                        text: 'Then tap the positions where you remember them.',
-                        board: SpatialBoard(gridSize: 4, selectedTiles: _pattern, compact: true),
+                      const SizedBox(height: 22),
+                      enter(
+                        _Step(
+                          number: 1,
+                          text: 'Remember the highlighted tiles. You have 5 seconds or less.',
+                          board: SpatialBoard(gridSize: 4, activeTiles: _pattern, compact: true),
+                          color: AppColors.violet,
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      Text("That's it.", style: text.titleLarge),
-                      const SizedBox(height: 28),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(onPressed: () => _done(context, play: true), child: const Text('GOT IT')),
+                      enter(
+                        _Step(
+                          number: 2,
+                          text: 'The board clears.',
+                          board: const SpatialBoard(gridSize: 4, compact: true),
+                          color: AppColors.blue,
+                        ),
+                      ),
+                      enter(
+                        _Step(
+                          number: 3,
+                          text: 'Tap the positions where you remember them.',
+                          board: SpatialBoard(gridSize: 4, selectedTiles: _pattern, compact: true),
+                          color: AppColors.coral,
+                        ),
+                      ),
+                      enter(
+                        const _Step(
+                          number: 4,
+                          text: 'Score 80% or more across the 10 rounds to move up a level.',
+                          icon: Icons.trending_up_rounded,
+                          color: AppColors.mint,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      PrimaryButton(
+                        label: 'Got it',
+                        icon: Icons.arrow_forward_rounded,
+                        onPressed: () => _done(context, play: true),
                       ),
                     ],
                   ),
@@ -87,27 +122,40 @@ class TutorialScreen extends StatelessWidget {
 }
 
 class _Step extends StatelessWidget {
-  const _Step({required this.number, required this.text, required this.board});
+  const _Step({required this.number, required this.text, required this.color, this.board, this.icon});
   final int number;
   final String text;
-  final Widget board;
+  final Color color;
+  final Widget? board;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.only(bottom: 12),
     child: GameCard(
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          SizedBox.square(dimension: 84, child: ExcludeSemantics(child: board)),
+          SizedBox.square(
+            dimension: 78,
+            child: board != null
+                ? ExcludeSemantics(child: board)
+                : Container(
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Icon(icon, color: color, size: 36),
+                  ),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Caption('Step $number', color: AppColors.active),
-                const SizedBox(height: 4),
-                Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, height: 1.3)),
+                Caption('Step $number', color: color),
+                const SizedBox(height: 2),
+                Text(text, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.35)),
               ],
             ),
           ),

@@ -30,7 +30,7 @@ class GameController extends ChangeNotifier {
     this.transitionDuration = const Duration(milliseconds: 300),
     this.tickInterval = const Duration(milliseconds: 50),
     this.onCountdownTick,
-  }) : remainingMs = ValueNotifier(spec.config.memorySeconds * 1000);
+  }) : remainingMs = ValueNotifier(spec.config.memoryMs);
 
   final RoundSpec spec;
   final Duration transitionDuration;
@@ -63,7 +63,17 @@ class GameController extends ChangeNotifier {
   RoundEvaluation? get evaluation => _evaluation;
 
   int get targetCount => spec.pattern.tileCount;
-  Duration get memoryDuration => Duration(seconds: spec.config.memorySeconds);
+
+  /// Remaining memorisation time computed right now (for per-frame
+  /// animations; [remainingMs] only updates every [tickInterval]).
+  int get liveRemainingMs {
+    if (_phase == GamePhase.ready) return memoryDuration.inMilliseconds;
+    if (_phase != GamePhase.memorizing) return 0;
+    final left = memoryDuration.inMilliseconds - _memoryWatch.elapsedMilliseconds;
+    return left < 0 ? 0 : left;
+  }
+
+  Duration get memoryDuration => spec.config.memoryDuration;
 
   bool get canSubmit => _phase == GamePhase.recalling && !_paused && _selected.length == targetCount;
   bool get tooManySelected => _selected.length > targetCount;
@@ -87,7 +97,7 @@ class GameController extends ChangeNotifier {
     _memoryWatch
       ..reset()
       ..start();
-    _lastShownSecond = spec.config.memorySeconds;
+    _lastShownSecond = (spec.config.memoryMs / 1000).ceil();
     _startTicker();
     notifyListeners();
   }

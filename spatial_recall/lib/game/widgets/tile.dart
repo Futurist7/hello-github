@@ -121,25 +121,18 @@ class _EmptyTile extends StatelessWidget {
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
       borderRadius: radius,
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF283152), AppColors.tileEmpty],
-      ),
+      color: missed ? AppColors.violet.withValues(alpha: 0.08) : AppColors.tileEmpty,
       border: Border.all(
-        color: missed ? AppColors.active.withValues(alpha: 0.75) : AppColors.tileEmptyEdge,
-        width: missed ? 2.2 : 1,
+        color: missed ? AppColors.violet.withValues(alpha: 0.85) : AppColors.tileEmptyEdge,
+        width: missed ? 2.4 : 1,
       ),
-      boxShadow: missed
-          ? [BoxShadow(color: AppColors.active.withValues(alpha: 0.18), blurRadius: 10)]
-          : const [BoxShadow(color: Color(0x33000000), blurRadius: 3, offset: Offset(0, 2))],
     ),
     child: missed
         ? FractionallySizedBox(
-            widthFactor: 0.3,
-            heightFactor: 0.3,
+            widthFactor: 0.28,
+            heightFactor: 0.28,
             child: DecoratedBox(
-              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.active.withValues(alpha: 0.55)),
+              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.violet.withValues(alpha: 0.7)),
             ),
           )
         : null,
@@ -164,11 +157,7 @@ class _FilledTile extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: radius,
         gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [light, deep]),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
-        boxShadow: [
-          BoxShadow(color: light.withValues(alpha: 0.55), blurRadius: 16, spreadRadius: 1),
-          const BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 3)),
-        ],
+        boxShadow: [BoxShadow(color: deep.withValues(alpha: 0.38), blurRadius: 14, offset: const Offset(0, 6))],
       ),
       child: CustomPaint(painter: _GlyphPainter(visual)),
     );
@@ -184,10 +173,10 @@ class _GlyphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
     final p = Paint()
-      ..color = const Color(0xCC0B1020)
+      ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
-      ..strokeWidth = (s * 0.09).clamp(1.5, 4.0);
+      ..strokeWidth = (s * 0.1).clamp(1.8, 4.5);
     final c = size.center(Offset.zero);
     final r = s * 0.17;
     switch (visual) {
@@ -204,7 +193,7 @@ class _GlyphPainter extends CustomPainter {
         canvas.drawCircle(c, r * 0.45, p..style = PaintingStyle.fill);
       default:
         // Highlight sheen on the active tile.
-        final sheen = Paint()..color = Colors.white.withValues(alpha: 0.22);
+        final sheen = Paint()..color = Colors.white.withValues(alpha: 0.28);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(size.width * 0.18, size.height * 0.14, size.width * 0.38, size.height * 0.12),

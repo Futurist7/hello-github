@@ -5,88 +5,116 @@ import 'package:spatial_recall/game/logic/pattern_generator.dart';
 import 'package:spatial_recall/game/logic/progression.dart';
 import 'package:spatial_recall/game/logic/streak_manager.dart';
 import 'package:spatial_recall/game/models/player_data.dart';
+import 'package:spatial_recall/game/models/pattern.dart';
 import 'package:spatial_recall/game/models/round_result.dart';
 import 'package:spatial_recall/game/models/tile_position.dart';
 
-RoundSpec levelSpec(int level) {
+SessionSpec levelSpec(int level) {
   final c = LevelManager.config(level);
-  return RoundSpec(
+  return SessionSpec(
     mode: RoundMode.level,
     config: c,
-    pattern: generatePattern(gridSize: c.gridSize, tileCount: c.tileCount, seed: level),
+    patterns: [
+      for (var i = 0; i < c.rounds; i++)
+        generatePattern(gridSize: c.gridSize, tileCount: c.tileCount, seed: level * 100 + i),
+    ],
   );
 }
 
-/// An answer with exactly [correct] right tiles (rest wrong).
-RoundEvaluation answer(RoundSpec spec, int correct) {
-  final target = spec.pattern.positions.toList();
+/// An answer to [pattern] with exactly [correct] right tiles (rest wrong).
+RoundEvaluation answer(Pattern pattern, int correct, {Duration time = const Duration(seconds: 30)}) {
+  final target = pattern.positions.toList();
   final wrong = <TilePosition>[];
-  for (var r = 0; r < spec.config.gridSize && wrong.length < target.length - correct; r++) {
-    for (var c = 0; c < spec.config.gridSize && wrong.length < target.length - correct; c++) {
+  for (var r = 0; r < pattern.gridSize && wrong.length < target.length - correct; r++) {
+    for (var c = 0; c < pattern.gridSize && wrong.length < target.length - correct; c++) {
       final t = TilePosition(r, c);
-      if (!spec.pattern.positions.contains(t)) wrong.add(t);
+      if (!pattern.positions.contains(t)) wrong.add(t);
     }
   }
-  return RoundEvaluation(
-    target: spec.pattern.positions,
-    selected: {...target.take(correct), ...wrong},
-    recallTime: const Duration(seconds: 30),
-  );
+  return RoundEvaluation(target: pattern.positions, selected: {...target.take(correct), ...wrong}, recallTime: time);
 }
+
+/// Every round answered with [correctPerRound] correct tiles.
+List<RoundEvaluation> session(SessionSpec spec, int correctPerRound) => [
+  for (final p in spec.patterns) answer(p, correctPerRound.clamp(0, p.tileCount)),
+];
 
 void main() {
   final day = DateTime(2026, 10, 7, 14);
 
   group('progression', () {
-    test('passing a level completes it and unlocks the next', () {
+    test('80% session accuracy promotes and unlocks the next level', () {
       final state = ProgressState.initial();
       expect(state.levels[1].unlocked, isFalse);
-      final spec = levelSpec(1);
-      final o = ProgressionEngine.apply(state, answer(spec, 3), spec, day);
-      expect(o.passed, isTrue);
-      expect(o.unlockedLevel, 2);
-      expect(state.levels[0].completed, isTrue);
-      expect(state.levels[1].unlocked, isTrue);
-      expect(state.currentLevel, 2);
+      final spec = levelSpec(2); // 4 tiles per round
+      // 8 perfect rounds + 2 rounds at 2/4 = 36/40 = 90%.
+      final rounds = [
+        for (var i = 0; i < 8; i++) answer(spec.patterns[i], 4),
+        answer(spec.patterns[8], 2),
+        answer(spec.patterns[9], 2),
+      ];
+      state.levels[0].completed = true;
+      state.levels[1].unlocked = true;
+      final o = ProgressionEngine.apply(state, spec, rounds, day);
+      expect(o.accuracy, 90);
+      expect(o.promoted, isTrue);
+      expect(o.unlockedLevel, 3);
+      expect(o.perfectRounds, 8);
+      expect(state.levels[1].completed, isTrue);
+      expect(state.levels[2].unlocked, isTrue);
+      expect(state.currentLevel, 3);
+      expect(o.roundScores.length, 10);
+      expect(o.score.total, o.roundScores.fold(0, (s, b) => s + b.total));
     });
 
-    test('failing does not unlock the next level', () {
+    test('below 80% does not promote', () {
       final state = ProgressState.initial();
-      final spec = levelSpec(1);
-      final o = ProgressionEngine.apply(state, answer(spec, 1), spec, day);
-      expect(o.passed, isFalse);
+      final spec = levelSpec(1); // 3 tiles per round
+      final o = ProgressionEngine.apply(state, spec, session(spec, 2), day); // 66%
+      expect(o.promoted, isFalse);
       expect(o.unlockedLevel, isNull);
       expect(state.levels[1].unlocked, isFalse);
       expect(state.levels[0].completed, isFalse);
+      expect(o.stars, 2);
+    });
+
+    test('streak bonus builds over consecutive perfect rounds within a session', () {
+      final spec = levelSpec(1);
+      final scores = ProgressionEngine.scoreRounds(session(spec, 3));
+      expect(scores.first.streakBonus, 0);
+      expect(scores[1].streakBonus, greaterThan(0));
+      expect(scores[5].streakBonus, greaterThan(scores[1].streakBonus));
+      expect(scores[9].streakBonus, scores[5].streakBonus); // Capped.
     });
 
     test('XP accumulates and player level rises', () {
       final state = ProgressState.initial();
       final spec = levelSpec(1);
-      final o = ProgressionEngine.apply(state, answer(spec, 3), spec, day);
-      expect(o.xpGained, 100);
-      expect(state.player.xp, 100);
+      final o = ProgressionEngine.apply(state, spec, session(spec, 3), day);
+      expect(o.xpGained, 200);
+      expect(state.player.xp, 200);
       expect(state.player.xpLevel, 2);
       expect(o.leveledUp, isTrue);
     });
 
-    test('best score and stars keep the best result', () {
+    test('best score and stars keep the best session', () {
       final state = ProgressState.initial();
-      final spec = levelSpec(2);
-      ProgressionEngine.apply(state, answer(spec, 4), spec, day);
-      final best = state.levels[1].bestScore;
-      expect(state.levels[1].stars, 5);
-      ProgressionEngine.apply(state, answer(spec, 2), spec, day);
-      expect(state.levels[1].bestScore, best);
-      expect(state.levels[1].stars, 5);
-      expect(state.player.bestScore, greaterThanOrEqualTo(best));
+      final spec = levelSpec(1);
+      ProgressionEngine.apply(state, spec, session(spec, 3), day);
+      final best = state.levels[0].bestScore;
+      expect(state.levels[0].stars, 5);
+      ProgressionEngine.apply(state, spec, session(spec, 1), day);
+      expect(state.levels[0].bestScore, best);
+      expect(state.levels[0].stars, 5);
+      expect(state.levels[0].completed, isTrue);
+      expect(state.player.bestScore, best);
     });
 
-    test('stats: games played and running average accuracy', () {
+    test('stats: sessions played and running average accuracy', () {
       final state = ProgressState.initial();
       final spec = levelSpec(2); // 4 tiles
-      ProgressionEngine.apply(state, answer(spec, 4), spec, day);
-      ProgressionEngine.apply(state, answer(spec, 2), spec, day);
+      ProgressionEngine.apply(state, spec, session(spec, 4), day);
+      ProgressionEngine.apply(state, spec, session(spec, 2), day);
       expect(state.player.gamesPlayed, 2);
       expect(state.player.averageAccuracy, closeTo(75, 0.001));
     });
@@ -94,20 +122,21 @@ void main() {
     test('only the first daily attempt is official', () {
       final state = ProgressState.initial();
       final daily = DailyChallenge.forDate(day);
-      RoundSpec spec(bool official) => RoundSpec(
+      SessionSpec spec(bool official) => SessionSpec(
         mode: RoundMode.daily,
         config: daily.config,
-        pattern: daily.pattern,
+        patterns: daily.patterns,
         dailyDate: daily.key,
         officialDaily: official,
       );
-      final first = ProgressionEngine.apply(state, answer(spec(true), 5), spec(true), day);
+      final first = ProgressionEngine.apply(state, spec(true), session(spec(true), 3), day);
       expect(first.officialDailyRecorded, isTrue);
+      expect(first.xpGained, lessThan(200)); // 5 rounds, worth half a level session.
       final score = state.dailyRecords[daily.key]!.score;
       // Even a mistaken "official" second attempt can't overwrite it.
-      final second = ProgressionEngine.apply(state, answer(spec(true), daily.config.tileCount), spec(true), day);
+      final second = ProgressionEngine.apply(state, spec(true), session(spec(true), 99), day);
       expect(second.officialDailyRecorded, isFalse);
-      final practice = ProgressionEngine.apply(state, answer(spec(false), daily.config.tileCount), spec(false), day);
+      final practice = ProgressionEngine.apply(state, spec(false), session(spec(false), 99), day);
       expect(practice.officialDailyRecorded, isFalse);
       expect(state.dailyRecords[daily.key]!.score, score);
     });
@@ -159,10 +188,15 @@ void main() {
   });
 
   group('daily challenge', () {
-    test('same date gives the same pattern, regardless of time of day', () {
+    test('same date gives the same patterns, regardless of time of day', () {
       final a = DailyChallenge.forDate(DateTime(2026, 10, 7, 0, 1));
       final b = DailyChallenge.forDate(DateTime(2026, 10, 7, 23, 59));
-      expect(a.pattern.positions, b.pattern.positions);
+      expect(a.patterns.length, DailyChallenge.rounds);
+      for (var i = 0; i < a.patterns.length; i++) {
+        expect(a.patterns[i].positions, b.patterns[i].positions);
+      }
+      expect(a.patterns[0].positions, isNot(a.patterns[1].positions));
+      expect(a.config.memoryMs, lessThanOrEqualTo(5000));
       expect(a.config.gridSize, b.config.gridSize);
       expect(a.key, '2026-10-07');
     });
@@ -171,10 +205,10 @@ void main() {
       final seen = <String>{};
       for (var i = 0; i < 60; i++) {
         final d = DailyChallenge.forDate(DateTime(2026, 1, 1).add(Duration(days: i)));
-        final sorted = d.pattern.positions.toList()..sort();
+        final sorted = d.patterns.first.positions.toList()..sort();
         seen.add('${d.config.gridSize}:$sorted');
         expect(d.config.gridSize, inInclusiveRange(6, 7));
-        expect(d.pattern.positions.length, d.config.tileCount);
+        expect(d.patterns.first.positions.length, d.config.tileCount);
       }
       expect(seen.length, 60);
     });

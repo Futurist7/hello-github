@@ -41,21 +41,35 @@ class ProgressState {
   int get bestDailyScore => dailyRecords.values.fold(0, (best, r) => r.score > best ? r.score : best);
 }
 
-/// Applies a finished round to the player's progression.
+/// Applies a finished session to the player's progression.
 class ProgressionEngine {
-  static RoundOutcome apply(ProgressState state, RoundEvaluation eval, RoundSpec spec, DateTime now) {
-    final player = state.player;
-    final accuracy = eval.accuracy;
-    final passed = accuracy >= spec.config.passPercentage;
+  /// Scores each round; the streak bonus follows consecutive perfect rounds.
+  static List<ScoreBreakdown> scoreRounds(List<RoundEvaluation> rounds) {
+    var streak = 0;
+    final scores = <ScoreBreakdown>[];
+    for (final r in rounds) {
+      scores.add(
+        ScoringEngine.score(
+          correct: r.correctCount,
+          target: r.targetCount,
+          recallTime: r.recallTime,
+          previousPerfectStreak: streak,
+        ),
+      );
+      streak = r.perfect ? streak + 1 : 0;
+    }
+    return scores;
+  }
 
-    final score = ScoringEngine.score(
-      correct: eval.correctCount,
-      target: eval.targetCount,
-      recallTime: eval.recallTime,
-      previousSuccessStreak: player.successStreak,
-    );
+  static SessionOutcome apply(ProgressState state, SessionSpec spec, List<RoundEvaluation> rounds, DateTime now) {
+    final player = state.player;
+    final accuracy = sessionAccuracy(rounds);
+    final promoted = accuracy >= spec.config.passPercentage;
+
+    final roundScores = scoreRounds(rounds);
+    final score = roundScores.fold(ScoreBreakdown.zero, (a, b) => a + b);
     final stars = ScoringEngine.stars(accuracy);
-    final xpGained = ScoringEngine.xpFor(accuracy);
+    final xpGained = ScoringEngine.xpFor(accuracy, rounds: rounds.length);
 
     final xpBefore = player.xp;
     final levelBefore = XpLevels.levelForXp(xpBefore);
@@ -67,7 +81,7 @@ class ProgressionEngine {
     player.gamesPlayed += 1;
     player.totalScore += score.total;
     if (newBest) player.bestScore = score.total;
-    player.successStreak = passed ? player.successStreak + 1 : 0;
+    player.successStreak = promoted ? player.successStreak + 1 : 0;
     StreakManager.recordPlay(player, now);
 
     int? unlocked;
@@ -79,7 +93,7 @@ class ProgressionEngine {
       if (score.total > progress.bestScore) progress.bestScore = score.total;
       if (accuracy > progress.bestAccuracy) progress.bestAccuracy = accuracy;
       if (stars > progress.stars) progress.stars = stars;
-      if (passed) {
+      if (promoted) {
         progress.completed = true;
         if (idx + 1 < state.levels.length && !state.levels[idx + 1].unlocked) {
           state.levels[idx + 1].unlocked = true;
@@ -91,12 +105,13 @@ class ProgressionEngine {
       dailyRecorded = true;
     }
 
-    return RoundOutcome(
+    return SessionOutcome(
       spec: spec,
-      evaluation: eval,
+      rounds: List.unmodifiable(rounds),
+      roundScores: roundScores,
       score: score,
       stars: stars,
-      passed: passed,
+      promoted: promoted,
       xpGained: xpGained,
       xpBefore: xpBefore,
       xpAfter: player.xp,

@@ -5,21 +5,12 @@ import '../app/theme.dart';
 import '../game/widgets/score_display.dart';
 import '../game/widgets/spatial_board.dart';
 import '../state/app_state.dart';
+import '../ui/components.dart';
 import 'home_shell.dart';
 
 const _months = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+  'January', 'February', 'March', 'April', 'May', 'June', //
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 class DailyScreen extends StatelessWidget {
@@ -31,81 +22,46 @@ class DailyScreen extends StatelessWidget {
     final challenge = state.todaysChallenge;
     final record = state.dailyRecordFor(challenge.key);
     final c = challenge.config;
-    final text = Theme.of(context).textTheme;
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
+      padding: EdgeInsets.only(bottom: navBarClearance(context)),
       children: [
-        const TabHeader(title: "TODAY'S CHALLENGE"),
+        TabHeader(title: 'Daily challenge', subtitle: '${_months[challenge.date.month - 1]} ${challenge.date.day}'),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                '${_months[challenge.date.month - 1]} ${challenge.date.day}',
-                style: text.titleMedium?.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  _Chip('${c.gridSize} × ${c.gridSize}'),
-                  const SizedBox(width: 8),
-                  _Chip('${c.tileCount} tiles'),
-                  const SizedBox(width: 8),
-                  _Chip('${c.memorySeconds} seconds'),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Caption("Today's board", align: TextAlign.center),
-              const SizedBox(height: 10),
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 240, maxHeight: 240),
-                  child: AspectRatio(
-                    aspectRatio: 1,
-                    // The pattern itself stays hidden until you play.
-                    child: SpatialBoard(gridSize: c.gridSize, compact: true),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Everyone gets the same pattern today.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 8),
               GameCard(
+                padding: const EdgeInsets.all(18),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Caption("Today's score"),
-                          const SizedBox(height: 4),
-                          Text(
-                            record == null ? '—' : formatNumber(record.score),
-                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
-                          ),
-                          if (record != null)
-                            Text(
-                              '${record.accuracy.round()}% accuracy',
-                              style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                            ),
-                        ],
-                      ),
+                    SizedBox.square(
+                      dimension: 116,
+                      // The patterns stay hidden until you play.
+                      child: SpatialBoard(gridSize: c.gridSize, compact: true),
                     ),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Caption('Best score'),
+                          _Fact(icon: Icons.repeat_rounded, text: '${c.rounds} rounds', color: AppColors.violet),
+                          _Fact(
+                            icon: Icons.grid_view_rounded,
+                            text: '${c.gridSize}×${c.gridSize} · ${c.tileCount} tiles',
+                            color: AppColors.blue,
+                          ),
+                          _Fact(icon: Icons.timer_rounded, text: '${c.memoryLabel} to memorize', color: AppColors.mint),
                           const SizedBox(height: 4),
-                          Text(
-                            state.progress.bestDailyScore == 0 ? '—' : formatNumber(state.progress.bestDailyScore),
-                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: AppColors.star),
+                          const Text(
+                            'Same boards for everyone today.',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -113,15 +69,42 @@ class DailyScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-              FilledButton(onPressed: () => Nav.playDaily(context), child: Text(record == null ? 'PLAY' : 'PRACTICE')),
+              const SizedBox(height: 18),
+              PrimaryButton(
+                label: record == null ? 'Play' : 'Practice',
+                icon: Icons.play_arrow_rounded,
+                gradient: AppGradients.sunrise,
+                onPressed: () => Nav.playDaily(context),
+              ),
               const SizedBox(height: 10),
               Text(
                 record == null
                     ? 'Your first attempt today is your official score.'
-                    : 'Official score recorded. Practice rounds won\'t change it.',
+                    : 'Official score recorded. Practice won\'t change it.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ScoreCard(
+                      label: "Today's score",
+                      value: record == null ? '—' : formatNumber(record.score),
+                      sub: record == null ? 'Not played yet' : '${record.accuracy.round()}% accuracy',
+                      color: AppColors.violet,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _ScoreCard(
+                      label: 'Best score',
+                      value: state.progress.bestDailyScore == 0 ? '—' : formatNumber(state.progress.bestDailyScore),
+                      sub: 'All time',
+                      color: AppColors.amber,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -131,22 +114,49 @@ class DailyScreen extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip(this.label);
-  final String label;
+class _ScoreCard extends StatelessWidget {
+  const _ScoreCard({required this.label, required this.value, required this.sub, required this.color});
+  final String label, value, sub;
+  final Color color;
 
   @override
-  Widget build(BuildContext context) => Flexible(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(color: AppColors.surfaceHigh, borderRadius: BorderRadius.circular(14)),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w800),
-      ),
+  Widget build(BuildContext context) => GameCard(
+    padding: const EdgeInsets.all(18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Caption(label),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: color, letterSpacing: -0.5),
+        ),
+        Text(
+          sub,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5, fontWeight: FontWeight.w500),
+        ),
+      ],
+    ),
+  );
+}
+
+class _Fact extends StatelessWidget {
+  const _Fact({required this.icon, required this.text, required this.color});
+  final IconData icon;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        ),
+      ],
     ),
   );
 }

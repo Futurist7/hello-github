@@ -49,20 +49,33 @@ void main() {
   });
 
   group('levels', () {
-    test('has 30 levels matching the specified opening progression', () {
+    test('30 levels of 10 rounds, memory time never above 5 seconds', () {
       expect(LevelManager.levelCount, 30);
+      for (final l in LevelManager.levels) {
+        expect(l.memoryMs, inInclusiveRange(2500, 5000), reason: 'level ${l.level}');
+        expect(l.rounds, 10);
+        expect(l.passPercentage, 80);
+      }
       final l1 = LevelManager.config(1);
-      expect((l1.gridSize, l1.tileCount, l1.memorySeconds), (5, 3, 20));
-      final l7 = LevelManager.config(7);
-      expect((l7.gridSize, l7.tileCount, l7.memorySeconds), (6, 8, 13));
-      final l20 = LevelManager.config(20);
-      expect((l20.gridSize, l20.tileCount, l20.memorySeconds), (8, 17, 6));
+      expect((l1.gridSize, l1.tileCount, l1.memoryMs), (5, 3, 5000));
+      expect(l1.memoryLabel, '5s');
+      expect(LevelManager.config(3).memoryLabel, '4.5s');
     });
 
-    test('difficulty stays within 1–5 and boards stay sparse', () {
+    test('difficulty rises overall and stays within 1–5', () {
       for (final l in LevelManager.levels) {
         expect(l.difficulty, inInclusiveRange(1, 5));
         expect(l.tileCount, lessThan(l.gridSize * l.gridSize ~/ 2));
+      }
+      expect(LevelManager.config(1).difficulty, lessThan(LevelManager.config(30).difficulty));
+      for (var i = 1; i < LevelManager.levelCount; i++) {
+        final a = LevelManager.levels[i - 1], b = LevelManager.levels[i];
+        // Each step adds tiles, a bigger board, or less time — never eases all three.
+        expect(
+          b.tileCount > a.tileCount || b.gridSize > a.gridSize || b.memoryMs < a.memoryMs,
+          isTrue,
+          reason: 'level ${b.level}',
+        );
       }
     });
   });

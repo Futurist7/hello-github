@@ -104,9 +104,8 @@ class SpatialBoard extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                borderRadius: BorderRadius.circular(compact ? 18 : 28),
-                border: Border.all(color: AppColors.outline.withValues(alpha: 0.7)),
-                boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 30, offset: Offset(0, 14))],
+                borderRadius: BorderRadius.circular(compact ? 18 : 30),
+                boxShadow: compact ? AppShadows.soft : AppShadows.lifted,
               ),
               child: Padding(
                 padding: EdgeInsets.all(pad),

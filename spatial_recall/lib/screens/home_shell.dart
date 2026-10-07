@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/routes.dart';
 import '../app/theme.dart';
+import '../ui/components.dart';
 import 'daily_screen.dart';
 import 'home_screen.dart';
 import 'levels_screen.dart';
@@ -55,6 +56,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         if (!didPop) _select(0);
       },
       child: Scaffold(
+        extendBody: true,
         body: GameBackground(
           child: SafeArea(
             bottom: false,
@@ -65,30 +67,79 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             ),
           ),
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: _select,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home_rounded),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.route_outlined),
-              selectedIcon: Icon(Icons.route_rounded),
-              label: 'Levels',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.today_outlined),
-              selectedIcon: Icon(Icons.today_rounded),
-              label: 'Daily',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.insights_outlined),
-              selectedIcon: Icon(Icons.insights_rounded),
-              label: 'Stats',
-            ),
+        bottomNavigationBar: _NavBar(index: _index, onSelect: _select),
+      ),
+    );
+  }
+}
+
+/// Floating white navigation bar with an animated pill on the active tab.
+class _NavBar extends StatelessWidget {
+  const _NavBar({required this.index, required this.onSelect});
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  static const _items = [
+    (Icons.home_rounded, 'Home'),
+    (Icons.route_rounded, 'Levels'),
+    (Icons.calendar_today_rounded, 'Daily'),
+    (Icons.insights_rounded, 'Stats'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottom > 0 ? bottom : 12),
+      child: Container(
+        height: 68,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: AppShadows.lifted,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            for (var i = 0; i < _items.length; i++)
+              Expanded(
+                child: Semantics(
+                  selected: i == index,
+                  child: Pressable(
+                    onTap: () => onSelect(i),
+                    semanticLabel: _items[i].$2,
+                    scale: 0.9,
+                    child: Center(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 280),
+                        curve: Curves.easeOutCubic,
+                        padding: EdgeInsets.symmetric(horizontal: i == index ? 14 : 8, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: i == index ? AppColors.violet.withValues(alpha: 0.1) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: ExcludeSemantics(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_items[i].$1, size: 23, color: i == index ? AppColors.violet : AppColors.textMuted),
+                              const SizedBox(height: 2),
+                              Text(
+                                _items[i].$2,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: i == index ? AppColors.violet : AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -98,18 +149,26 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
 /// Header with a title and the settings button, shared by the tabs.
 class TabHeader extends StatelessWidget {
-  const TabHeader({super.key, required this.title});
+  const TabHeader({super.key, required this.title, this.subtitle});
   final String title;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 8, 8, 8),
+    padding: const EdgeInsets.fromLTRB(24, 12, 20, 8),
     child: Row(
       children: [
         Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 1.5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.6)),
+              if (subtitle != null)
+                Text(
+                  subtitle!,
+                  style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                ),
+            ],
           ),
         ),
         const SettingsButton(),
@@ -122,10 +181,12 @@ class SettingsButton extends StatelessWidget {
   const SettingsButton({super.key});
 
   @override
-  Widget build(BuildContext context) => IconButton(
+  Widget build(BuildContext context) => CircleIconButton(
+    icon: Icons.tune_rounded,
     tooltip: 'Settings',
-    iconSize: 26,
-    icon: const Icon(Icons.settings_rounded, color: AppColors.textSecondary),
     onPressed: () => Navigator.of(context).push(gameRoute<void>(context, (_) => const SettingsScreen())),
   );
 }
+
+/// Bottom padding so scrolling content clears the floating nav bar.
+double navBarClearance(BuildContext context) => 100 + MediaQuery.paddingOf(context).bottom;

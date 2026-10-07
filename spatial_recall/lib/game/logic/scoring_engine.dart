@@ -10,19 +10,20 @@ class ScoringEngine {
   /// Recall time that earns no speed bonus: a few seconds plus ~2s per tile.
   static Duration relaxedRecallTime(int tileCount) => Duration(milliseconds: 4000 + tileCount * 2000);
 
+  /// Scores one round. [previousPerfectStreak] is the number of perfect
+  /// rounds immediately before this one in the session.
   static ScoreBreakdown score({
     required int correct,
     required int target,
     required Duration recallTime,
-    required int previousSuccessStreak,
+    required int previousPerfectStreak,
   }) {
     final base = correct * pointsPerTile;
     final speedFactor = speedFactorFor(target, recallTime);
     final speedBonus = correct == 0 ? 0 : (base * 0.25 * speedFactor).round();
     final perfect = target > 0 && correct == target;
-    final perfectBonus = perfect ? 100 + target * 25 : 0;
-    final passedEnough = target > 0 && correct / target >= 0.6;
-    final multiplier = passedEnough ? streakMultiplier(previousSuccessStreak) : 1.0;
+    final perfectBonus = perfect ? 50 + target * 15 : 0;
+    final multiplier = perfect ? streakMultiplier(previousPerfectStreak) : 1.0;
     final streakBonus = ((base + speedBonus + perfectBonus) * (multiplier - 1)).round();
     return ScoreBreakdown(
       base: base,
@@ -49,21 +50,27 @@ class ScoringEngine {
     return m > maxStreakMultiplier ? maxStreakMultiplier : m;
   }
 
-  /// 0–5 stars from accuracy.
+  /// 0–5 stars from session accuracy. Promotion (80%) is three stars.
   static int stars(double accuracy) {
-    if (accuracy >= 100) return 5;
-    if (accuracy >= 75) return 4;
-    if (accuracy >= 60) return 3;
-    if (accuracy >= 40) return 2;
+    if (accuracy >= 97) return 5;
+    if (accuracy >= 90) return 4;
+    if (accuracy >= 80) return 3;
+    if (accuracy >= 60) return 2;
     if (accuracy > 0) return 1;
     return 0;
   }
 
-  static int xpFor(double accuracy) {
-    if (accuracy >= 100) return 100;
-    if (accuracy >= 80) return 75;
-    if (accuracy >= 60) return 50;
-    return 25;
+  /// XP for a session: scales with accuracy and with the number of rounds
+  /// (a 10-round level session is worth twice a 5-round daily).
+  static int xpFor(double accuracy, {int rounds = 10}) {
+    final perFive = accuracy >= 100
+        ? 100
+        : accuracy >= 80
+        ? 75
+        : accuracy >= 60
+        ? 50
+        : 25;
+    return (perFive * rounds / 5).round();
   }
 }
 

@@ -7,9 +7,8 @@ import 'package:spatial_recall/game/models/round_result.dart';
 import 'package:spatial_recall/game/models/tile_position.dart';
 
 RoundSpec spec() {
-  final c = LevelManager.config(1); // 5×5, 3 tiles, 20s
+  final c = LevelManager.config(1); // 5×5, 3 tiles, 5s
   return RoundSpec(
-    mode: RoundMode.level,
     config: c,
     pattern: generatePattern(gridSize: c.gridSize, tileCount: c.tileCount, seed: 7),
   );
@@ -22,7 +21,9 @@ void main() {
       expect(g.phase, GamePhase.ready);
       g.start();
       expect(g.phase, GamePhase.memorizing);
-      async.elapse(const Duration(seconds: 19, milliseconds: 900));
+      async.elapse(const Duration(seconds: 2));
+      expect(g.liveRemainingMs, 3000);
+      async.elapse(const Duration(seconds: 2, milliseconds: 900));
       expect(g.phase, GamePhase.memorizing);
       expect(g.remainingMs.value, lessThanOrEqualTo(150));
       async.elapse(const Duration(milliseconds: 200));
@@ -51,7 +52,7 @@ void main() {
     fakeAsync((async) {
       final s = spec();
       final g = GameController(s)..start();
-      async.elapse(const Duration(seconds: 21));
+      async.elapse(const Duration(seconds: 6));
       expect(g.phase, GamePhase.recalling);
       final target = s.pattern.positions.toList();
       g.toggle(target[0]);
@@ -87,15 +88,16 @@ void main() {
   test('pausing freezes the memorisation timer exactly', () {
     fakeAsync((async) {
       final g = GameController(spec())..start();
-      async.elapse(const Duration(seconds: 5));
+      async.elapse(const Duration(seconds: 2));
       g.pause();
       async.elapse(const Duration(minutes: 10));
       expect(g.phase, GamePhase.memorizing);
-      expect(g.remainingMs.value, closeTo(15000, 100));
+      expect(g.remainingMs.value, closeTo(3000, 100));
+      expect(g.liveRemainingMs, 3000);
       g.resume();
-      async.elapse(const Duration(seconds: 14));
+      async.elapse(const Duration(milliseconds: 2900));
       expect(g.phase, GamePhase.memorizing);
-      async.elapse(const Duration(seconds: 2));
+      async.elapse(const Duration(milliseconds: 200));
       expect(g.phase, isNot(GamePhase.memorizing));
       g.dispose();
     });
@@ -105,7 +107,7 @@ void main() {
     fakeAsync((async) {
       final s = spec();
       final g = GameController(s)..start();
-      async.elapse(const Duration(seconds: 21));
+      async.elapse(const Duration(seconds: 6));
       async.elapse(const Duration(seconds: 2));
       g.pause();
       expect(g.toggle(s.pattern.positions.first), isFalse);

@@ -38,12 +38,12 @@ class _SplashScreenState extends State<SplashScreen> {
       _step = _sequence.length - 1;
       _timer = Timer(const Duration(milliseconds: 500), _finish);
     } else {
-      _timer = Timer.periodic(const Duration(milliseconds: 230), (t) {
+      _timer = Timer.periodic(const Duration(milliseconds: 220), (t) {
         if (_step < _sequence.length - 1) {
           setState(() => _step++);
         } else {
           t.cancel();
-          _timer = Timer(const Duration(milliseconds: 350), _finish);
+          _timer = Timer(const Duration(milliseconds: 380), _finish);
         }
       });
     }
@@ -65,18 +65,22 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    body: GameBackground(
+    body: DecoratedBox(
+      decoration: const BoxDecoration(gradient: AppGradients.brand),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LogoMark(size: 96, lit: _sequence[_step]),
-            const SizedBox(height: 32),
+            LogoMark(size: 104, lit: _sequence[_step], onDark: true),
+            const SizedBox(height: 28),
+            const Text(
+              'Spatial Recall',
+              style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.8),
+            ),
+            const SizedBox(height: 4),
             Text(
-              'SPATIAL\nRECALL',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.displaySmall
-                  ?.copyWith(fontWeight: FontWeight.w900, height: 1.0, letterSpacing: 4),
+              'Train your spatial memory',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 15, fontWeight: FontWeight.w500),
             ),
           ],
         ),
