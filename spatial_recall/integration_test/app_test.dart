@@ -76,7 +76,9 @@ void main() {
     expect(find.text('HOW TO PLAY'), findsOneWidget);
     await tester.ensureVisible(find.text('GOT IT'));
     await tester.tap(find.text('GOT IT'));
-    await waitFor(tester, find.text('GET READY'));
+    // Wait for the game screen itself: on slow devices the 0.9s "GET READY"
+    // label can come and go between two polls.
+    await waitFor(tester, find.byType(GameScreen));
     expect(find.text('LEVEL 1'), findsOneWidget);
 
     await waitFor(tester, find.text('REMEMBER'));
