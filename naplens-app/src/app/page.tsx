@@ -1,8 +1,10 @@
+import { signOut } from "./login/actions";
+
 const modules = [
   { name: "Clients", note: "Records, files and receipts", phase: "Phase 2" },
   { name: "Proposals & Quotes", note: "Offer builder with PDF export", phase: "Phase 3" },
   { name: "Invoices", note: "GHS and USD, status tracking", phase: "Phase 3" },
-  { name: "Payments", note: "MoMo checkout and bank transfers", phase: "Phase 4" },
+  { name: "Payments", note: "Manual payment recording and overdue tracking", phase: "Phase 4" },
   { name: "Retainers", note: "Recurring invoice schedules", phase: "Phase 5" },
   { name: "Expenses & Reports", note: "P&L, cash view, receivables", phase: "Phase 6" },
 ];
@@ -10,7 +12,10 @@ const modules = [
 export default function Home() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6">
-      <header className="mb-10">
+      <header className="relative mb-10">
+        <form action={signOut} className="absolute right-0 top-0">
+          <button className="text-sm underline opacity-70">Sign out</button>
+        </form>
         <p className="text-sm font-medium uppercase tracking-wide text-brand">
           Naplens Digital
         </p>
