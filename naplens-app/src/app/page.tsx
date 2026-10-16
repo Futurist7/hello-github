@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { signOut } from "./login/actions";
 
-const modules = [
-  { name: "Clients", note: "Records, files and receipts", phase: "Phase 2" },
+const modules: { name: string; note: string; phase: string; href?: string }[] = [
+  { name: "Clients", note: "Records, files and receipts", phase: "Phase 2", href: "/clients" },
   { name: "Proposals & Quotes", note: "Offer builder with PDF export", phase: "Phase 3" },
   { name: "Invoices", note: "GHS and USD, status tracking", phase: "Phase 3" },
   { name: "Payments", note: "Manual payment recording and overdue tracking", phase: "Phase 4" },
@@ -28,18 +29,24 @@ export default function Home() {
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {modules.map((m) => (
-          <article
-            key={m.name}
-            className="rounded-lg border border-black/10 p-5 dark:border-white/15"
-          >
-            <h2 className="font-medium">{m.name}</h2>
-            <p className="mt-1 text-sm opacity-70">{m.note}</p>
-            <span className="mt-4 inline-block rounded bg-brand/10 px-2 py-0.5 text-xs text-brand">
-              {m.phase}
-            </span>
-          </article>
-        ))}
+        {modules.map((m) => {
+          const card = (
+            <article className="h-full rounded-lg border border-black/10 p-5 dark:border-white/15">
+              <h2 className="font-medium">{m.name}</h2>
+              <p className="mt-1 text-sm opacity-70">{m.note}</p>
+              <span className="mt-4 inline-block rounded bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                {m.href ? "Open" : m.phase}
+              </span>
+            </article>
+          );
+          return m.href ? (
+            <Link key={m.name} href={m.href}>
+              {card}
+            </Link>
+          ) : (
+            <div key={m.name}>{card}</div>
+          );
+        })}
       </section>
     </main>
   );
